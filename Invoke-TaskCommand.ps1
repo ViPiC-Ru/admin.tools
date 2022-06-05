@@ -46,7 +46,7 @@
   с папкой вывода.
 
   .NOTES
-  Версия: 0.2.0
+  Версия: 0.2.1
   Автор: @ViPiC
 #>
 
@@ -85,12 +85,9 @@ PROCESS {
         $LocalInputDirectory = Get-Item -Path $InputPath;
         if (-not($LocalInputDirectory)) { $CustomError = 1; };
     };
-    # Создаём директорию вывода
+    # Получаем или создаём директорию вывода
     if (-not($CustomError) -and $OutputPath) {
         if (Test-Path -Path $OutputPath) {
-            foreach ($Item in (Get-ChildItem -Path $OutputPath)) {
-                Remove-Item -Path $Item.FullName -Force -Recurse;
-            };
             $LocalOutputDirectory = Get-Item -Path $OutputPath;
         }
         else {
@@ -105,7 +102,6 @@ PROCESS {
             $IsСheckPass = $null; # Прошёл ли удалённый компьютер проверку
             $RemoteSession = $null; # Сбрасываем сессию на удалённом компьютере
             $RemoteTempDirectory = $null; # Сбрасываем удалённую временную директорию
-            $LocalTempDirectory = $null; # Сбрасываем локальную временную директорию
             $TaskResult = $null; # Сбрасываем строку с кодом возврата выполнения команды
             # Создаём сессию на удалённом компьютере
             if (-not($CustomError)) {
@@ -121,13 +117,13 @@ PROCESS {
                     $IsСheckPass = $true;
                     # Проверяем фильтры для исключения
                     for ($Index = 0; $Index -lt $ExcludeWQL.Count -and $IsСheckPass; $Index++) {
-                        $WQL = $ExcludeWQL[$Index]; # Получаем очередной запрос
+                        $WQL = $ExcludeWQL[$Index].Replace('"', "'");
                         $WmiResponse = Get-WmiObject -Query $WQL -ErrorAction "Ignore";
                         if ($WmiResponse) { $IsСheckPass = $false; };
                     };
                     # Проверяем фильтры для включения
                     for ($Index = 0; $Index -lt $IncludeWQL.Count -and $IsСheckPass; $Index++) {
-                        $WQL = $IncludeWQL[$Index]; # Получаем очередной запрос
+                        $WQL = $IncludeWQL[$Index].Replace('"', "'");
                         $WmiResponse = Get-WmiObject -Query $WQL -ErrorAction "Ignore";
                         if (-not($WmiResponse)) { $IsСheckPass = $false; };
                     };
@@ -153,19 +149,13 @@ PROCESS {
                 };
                 if (-not($RemoteTempDirectory)) { $CustomError = 4; };
             };
-            # Копируем или создаём директорию ввода на удалённый компьютере
+            # Создаём директорию ввода на удалённом компьютере
             if (-not($CustomError) -and $IsСheckPass) {
-                if ($InputPath) { Copy-Item -Path $LocalInputDirectory.FullName -ToSession $RemoteSession -Destination $RemoteTempDirectory.FullName -Recurse; };
-                $RemoteInputDirectory = Invoke-Command -Session $RemoteSession -ArgumentList $LocalInputDirectory, $RemoteTempDirectory, $InputName, $InputPath -ScriptBlock {
+                $RemoteInputDirectory = Invoke-Command -Session $RemoteSession -ArgumentList $RemoteTempDirectory, $InputName -ScriptBlock {
                     # Принимаем параметры из родительского контекста
-                    Param ($LocalInputDirectory, $RemoteTempDirectory, $InputName, $InputPath);
-                    # Переименовываем директорию ввода
-                    if ($InputPath) {
-                        $RemoteInputDirectory = Rename-Item -Path (Join-Path $RemoteTempDirectory.FullName $LocalInputDirectory.Name) -NewName $InputName -PassThru;
-                    }
-                    else {
-                        $RemoteInputDirectory = New-Item -ItemType "Directory" -Path (Join-Path $RemoteTempDirectory.FullName $InputName);
-                    };
+                    Param ($RemoteTempDirectory, $InputName);
+                    # Создаём дерикторию ввода
+                    $RemoteInputDirectory = New-Item -ItemType "Directory" -Path (Join-Path $RemoteTempDirectory.FullName $InputName);
                     # Возвращаем результат
                     $RemoteInputDirectory;
                 };
@@ -176,12 +166,20 @@ PROCESS {
                 $RemoteOutputDirectory = Invoke-Command -Session $RemoteSession -ArgumentList $RemoteTempDirectory, $OutputName -ScriptBlock {
                     # Принимаем параметры из родительского контекста
                     Param ($RemoteTempDirectory, $OutputName);
-                    # Переименовываем директорию ввода
+                    # Создаём дерикторию вывода
                     $RemoteOutputDirectory = New-Item -ItemType "Directory" -Path (Join-Path $RemoteTempDirectory.FullName $OutputName);
                     # Возвращаем результат
                     $RemoteOutputDirectory;
                 };
                 if (-not($RemoteOutputDirectory)) { $CustomError = 6; };
+            };
+            # Копируем содержимое директории ввода на удалённый компьютер
+            if (-not($CustomError) -and $IsСheckPass -and $InputPath) {
+                $Items = Get-ChildItem -Path $LocalInputDirectory.FullName;
+                foreach ($Item in $Items) {
+                    $ItemPath = Join-Path $RemoteInputDirectory.FullName $Item.Name;
+                    Copy-Item -Path $Item.FullName -Destination $ItemPath -ToSession $RemoteSession -Force -Recurse;
+                };
             };
             # Назначаем права и выполняем команду на удалённом компьютере через задачу
             if (-not($CustomError) -and $IsСheckPass) {
@@ -227,25 +225,20 @@ PROCESS {
                     if (-not($TaskResult)) { $SuccessRunCount++; };
                 };
             };
-            # Копируем директорию вывода с удалённого компьютера
+            # Копируем содержимое директории вывода с удалённого компьютера
             if (-not($CustomError) -and $IsСheckPass -and $OutputPath -and $IsCommandRun) {
-                # Создаём временную директорию для получения результата
-                $TempPath = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName());
-                if (Test-Path -Path $TempPath) { Remove-Item -Path $TempPath -Force -Recurse; };
-                $LocalTempDirectory = New-Item -ItemType "Directory" -Path $TempPath;
-                # Копируем полученный результат с удалённого компьютера через временную папку
-                Copy-Item -Path $RemoteOutputDirectory.FullName -FromSession $RemoteSession -Destination $LocalTempDirectory.FullName -Recurse;
-                foreach ($Directory in (Get-ChildItem -Path $LocalTempDirectory.FullName)) {
-                    foreach ($Item in (Get-ChildItem -Path $Directory.FullName)) {
-                        $ItemPath = Join-Path $LocalOutputDirectory.FullName $Item.Name;
-                        if (Test-Path -Path $ItemPath) { Remove-Item -Path $ItemPath -Force -Recurse; };
-                        Copy-Item -Path $Item.FullName -Destination $ItemPath -Force;
-                    };
+                $Items = Invoke-Command -Session $RemoteSession -ArgumentList $RemoteOutputDirectory -ScriptBlock {
+                    # Принимаем параметры из родительского контекста
+                    Param ($RemoteOutputDirectory);
+                    # Получаем список элиментов в папке
+                    $Items = Get-ChildItem -Path $RemoteOutputDirectory.FullName;
+                    # Возвращаем результат
+                    $Items;
                 };
-            };
-            # Удаляем временную директорию на локальном компьютер
-            if ($LocalTempDirectory) {
-                Remove-Item -Path $LocalTempDirectory.FullName -Force -Recurse;
+                foreach ($Item in $Items) {
+                    $ItemPath = Join-Path $LocalOutputDirectory.FullName $Item.Name;
+                    Copy-Item -Path $Item.FullName -Destination $ItemPath -FromSession $RemoteSession -Force -Recurse;
+                };
             };
             # Удаляем временную директорию на удалённый компьютер
             if ($RemoteTempDirectory) {
