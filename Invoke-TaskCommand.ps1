@@ -46,7 +46,7 @@
   с папкой вывода.
 
   .NOTES
-  Версия: 0.2.1
+  Версия: 0.2.2
   Автор: @ViPiC
 #>
 
@@ -118,14 +118,14 @@ PROCESS {
                     # Проверяем фильтры для исключения
                     for ($Index = 0; $Index -lt $ExcludeWQL.Count -and $IsСheckPass; $Index++) {
                         $WQL = $ExcludeWQL[$Index].Replace('"', "'");
-                        $WmiResponse = Get-WmiObject -Query $WQL -ErrorAction "Ignore";
-                        if ($WmiResponse) { $IsСheckPass = $false; };
+                        $CimResponse = Get-CimInstance -Query $WQL -ErrorAction "Ignore";
+                        if ($CimResponse) { $IsСheckPass = $false; };
                     };
                     # Проверяем фильтры для включения
                     for ($Index = 0; $Index -lt $IncludeWQL.Count -and $IsСheckPass; $Index++) {
                         $WQL = $IncludeWQL[$Index].Replace('"', "'");
-                        $WmiResponse = Get-WmiObject -Query $WQL -ErrorAction "Ignore";
-                        if (-not($WmiResponse)) { $IsСheckPass = $false; };
+                        $CimResponse = Get-CimInstance -Query $WQL -ErrorAction "Ignore";
+                        if (-not($CimResponse)) { $IsСheckPass = $false; };
                     };
                     # Возвращаем результат
                     $IsСheckPass;
