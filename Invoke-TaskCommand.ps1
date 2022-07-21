@@ -48,7 +48,7 @@
   с папкой вывода.
 
   .NOTES
-  Версия: 0.3.0
+  Версия: 0.3.1
   Автор: @ViPiC
 #>
 
@@ -305,7 +305,9 @@ PROCESS {
                     $IsСheckPass = $JobResult.IsСheckPass;
                     $IsCommandRun = $JobResult.IsCommandRun;
                     # Обрабатываем результат выполнения задания
-                    if (-not($TaskResult)) { $SuccessRunCount++; };
+                    if (-not($TaskResult) -and $IsCommandRun) {
+                        $SuccessRunCount++;
+                    };
                     if (-not($OutputPath) -and $IsСheckPass) {
                         $Result += [PSCustomObject]@{
                             "ComputerName" = $ComputerNameItem;
