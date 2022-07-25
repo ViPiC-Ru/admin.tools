@@ -29,7 +29,7 @@
   значение для заданного ключа для последнего сертификата.
 
   .NOTES
-  Версия: 0.1.1
+  Версия: 0.1.2
   Автор: @ViPiC
 #>
 
@@ -52,29 +52,39 @@ PROCESS {
     function ConvertTo-HashTable {
         # Конвертирует строки в хеш таблицу
         Param (
-            [String]$StringData
+            [String]$StringData,
+            $ExtensionData
         )
 
         $HashTable = @{};
-        $DelimNewLine = [Environment]::NewLine;
-        $StringLines = $StringData.Split($DelimNewLine);
-        foreach ($StringLine in $StringLines) {
-            $StringLineData = ConvertFrom-StringData -StringData $StringLine;
-            foreach ($Key in $StringLineData.Keys) {
-                $Value = $StringLineData[$Key];
-                if ($Value.Length -ge 2 -and $Value[0] -eq '"' -and $Value[$Value.Length - 1] -eq '"') {
-                    $Value = $Value.Substring(1, $Value.Length - 2);
-                };
-                if ($HashTable[$Key]) {
-                    $HashTable[$Key] = switch ($Key) {
-                        "DC" { $Value + "." + $HashTable[$Key] }
-                        "OU" { $HashTable[$Key] + "\" + $Value }
-                        default { $HashTable[$Key] + " " + $Value }
+        if ($StringData) {
+            $DelimNewLine = [Environment]::NewLine;
+            $StringLines = $StringData.Split($DelimNewLine);
+            foreach ($StringLine in $StringLines) {
+                $StringLineData = ConvertFrom-StringData -StringData $StringLine;
+                foreach ($Key in $StringLineData.Keys) {
+                    $Value = $StringLineData[$Key];
+                    if ($Value.Length -ge 2 -and $Value[0] -eq '"' -and $Value[$Value.Length - 1] -eq '"') {
+                        $Value = $Value.Substring(1, $Value.Length - 2);
                     };
-                }
-                else {
-                    $HashTable[$Key] = $Value;
+                    if ($HashTable[$Key]) {
+                        $HashTable[$Key] = switch ($Key) {
+                            "DC" { $Value + "." + $HashTable[$Key] }
+                            "OU" { $HashTable[$Key] + "\" + $Value }
+                            default { $HashTable[$Key] + " " + $Value }
+                        };
+                    }
+                    else {
+                        $HashTable[$Key] = $Value;
+                    };
                 };
+            };
+        }
+        elseif ($ExtensionData) {
+            foreach ($Extension in $ExtensionData) {
+                $Value = $Extension.Format($true);
+                if (-not($Value)) { $Value = $true; };
+                $HashTable[$Extension.Oid.Value] = $Value;
             };
         };
         return $HashTable;
@@ -95,6 +105,20 @@ PROCESS {
             $Name = $Name.TrimStart("0");
         };
         return $Name;
+    };
+
+    function Repair-NotEmpty {
+        # Исправляет и возвращает не пустое значение
+        Param (
+            $Object,
+            $Replacement
+        )
+
+        $Value = $null;
+        foreach ($Item in $Replacement.GetEnumerator()) {
+            if ($Object[$Item.Name]) { $Value = $Item.Value; };
+        }
+        return $Value;
     };
 
     function Repair-Date {
@@ -165,6 +189,7 @@ PROCESS {
         if ($FixExpire) { $MaxExpireDays = 500; } else { $MaxExpireDays = 0; };
         $IssuerData = ConvertTo-HashTable -StringData $CertificateItem.IssuerName.Format($true);
         $SubjectData = ConvertTo-HashTable -StringData $CertificateItem.SubjectName.Format($true);
+        $ExtensionData = ConvertTo-HashTable -ExtensionData $CertificateItem.Extensions;
         $CertificateData = [PSCustomObject]@{};
         # Информация об сертификате
         if ($DataKey -and $DataValue) {
@@ -203,6 +228,8 @@ PROCESS {
             Add-Member -InputObject $CertificateData -MemberType "NoteProperty" -Name "CER-SUBJECT-STATE" -Value $SubjectData["S"];
             Add-Member -InputObject $CertificateData -MemberType "NoteProperty" -Name "CER-SUBJECT-COUNTRY" -Value $SubjectData["C"];
         };
+        # Информация об встроенных лицензиях
+        Add-Member -InputObject $CertificateData -MemberType "NoteProperty" -Name "CER-EMBEDDED-LICENSE" -Value (Repair-NotEmpty $ExtensionData @{"1.2.643.2.2.49.2" = "КриптоПро CSP" });
         # Добавляем в результат
         if ((-not $DataValue) -and $DataKey) {
             $Result = $CertificateData.$DataKey;
