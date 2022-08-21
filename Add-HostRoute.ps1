@@ -26,7 +26,7 @@
   Скрипт не генерит возвращаемые объекты.
 
   .NOTES
-  Версия: 0.2.0
+  Версия: 0.2.1
   Автор: @ViPiC
 #>
 
@@ -41,7 +41,7 @@ Param (
     [string]$Check,
 
     [Parameter (Mandatory = $true)]
-    [ValidateRange(2, 254)]
+    [ValidateRange(1, 255)]
     [int]$Metric
 );
 
@@ -57,7 +57,7 @@ if ($Gateway -and ($isPASSv4 -or $isPASSv6)) {
         if (($List[0].IndexOf(":") -ge 0) -and $isPASSv6) { $GwIPv6s = @($List[0]); };
     }
     else {
-        $Resolve = (Resolve-DnsName -Name $List[0] -ErrorAction "Ignore" | Where-Object "Section" -eq "Answer");
+        $Resolve = (Resolve-DnsName -Name $List[0] -ErrorAction "Ignore" | Where-Object "Section" -EQ "Answer");
         if ($Resolve -and $isPASSv4) { foreach ($GwIPv4 in $Resolve.IP4Address) { $GwIPv4s += $GwIPv4; }; };
         if ($Resolve -and $isPASSv6) { foreach ($GwIPv6 in $Resolve.IP6Address) { $GwIPv6s += $GwIPv6; }; };
     };
@@ -73,7 +73,7 @@ if ($Check -and ($isPASSv4 -or $isPASSv6)) {
         if (($List[0].IndexOf(":") -ge 0) -and $isPASSv6) { $ChkIPv6s = @($List[0]); };
     }
     else {
-        $Resolve = (Resolve-DnsName -Name $List[0] -ErrorAction "Ignore" | Where-Object "Section" -eq "Answer");
+        $Resolve = (Resolve-DnsName -Name $List[0] -ErrorAction "Ignore" | Where-Object "Section" -EQ "Answer");
         if ($Resolve -and $isPASSv4) { foreach ($ChkIPv4 in $Resolve.IP4Address) { $ChkIPv4s += $ChkIPv4; }; };
         if ($Resolve -and $isPASSv6) { foreach ($ChkIPv6 in $Resolve.IP6Address) { $ChkIPv6s += $ChkIPv6; }; };
     };
@@ -89,7 +89,7 @@ if ($Destination -and ($isPASSv4 -or $isPASSv6)) {
         if (($List[0].IndexOf(":") -ge 0) -and $isPASSv6) { $DstIPv6s = @($List[0]); };
     }
     else {
-        $Resolve = (Resolve-DnsName -Name $List[0] -ErrorAction "Ignore" | Where-Object "Section" -eq "Answer");
+        $Resolve = (Resolve-DnsName -Name $List[0] -ErrorAction "Ignore" | Where-Object "Section" -EQ "Answer");
         if ($Resolve -and $isPASSv4) { foreach ($DstIPv4 in $Resolve.IP4Address) { $DstIPv4s += $DstIPv4; }; };
         if ($Resolve -and $isPASSv6) { foreach ($DstIPv6 in $Resolve.IP6Address) { $DstIPv6s += $DstIPv6; }; };
     };
@@ -131,7 +131,7 @@ if ($Gateway -and ($isPASSv4 -or $isPASSv6)) {
     };
 };
 # Удаляем устаревшие маршруты
-$NetRoutes = (Get-NetRoute -RouteMetric $Metric -PolicyStore "ActiveStore" -ErrorAction "Ignore");
+$NetRoutes = (Get-NetRoute -RouteMetric $Metric -PolicyStore "ActiveStore" -ErrorAction "Ignore" | Where-Object "NextHop" -NotIn "::","0.0.0.0");
 if (-not($NetRoutes)) { $NetRoutes = @(); };
 foreach ($NetRoute in $NetRoutes) {
     $isPASSv4 = $false;
