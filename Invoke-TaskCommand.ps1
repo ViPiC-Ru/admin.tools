@@ -48,7 +48,7 @@
   с папкой вывода.
 
   .NOTES
-  Версия: 0.3.1
+  Версия: 0.3.2
   Автор: @ViPiC
 #>
 
@@ -155,8 +155,15 @@ PROCESS {
                         $RemoteTempDirectory = Invoke-Command -Session $RemoteSession -ArgumentList $WrapperName -ScriptBlock {
                             # Принимаем параметры из родительского контекста
                             Param ($WrapperName);
+                            # Генерируем имя для временной папки
+                            $Stream = [System.IO.MemoryStream]::New();
+                            $Writer = [System.IO.StreamWriter]::New($Stream);
+                            $Writer.Write($TaskName);
+                            $Writer.Flush();
+                            $Stream.Position = 0;
+                            $TempName = (Get-FileHash -InputStream $Stream -Algorithm "MD5").Hash.SubString(22);
                             # Создаём временную папку для выполнения команды
-                            $TempPath = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName());
+                            $TempPath = Join-Path ([System.IO.Path]::GetTempPath()) $TempName;
                             if (Test-Path -Path $TempPath) { Remove-Item -Path $TempPath -Force -Recurse; };
                             $RemoteTempDirectory = New-Item -ItemType "Directory" -Path $TempPath;
                             # Добавляем во временную папку скрипт обёрку из JScript для скрытия окна консоли
