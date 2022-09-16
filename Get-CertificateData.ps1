@@ -29,7 +29,7 @@
   значение для заданного ключа для последнего сертификата.
 
   .NOTES
-  Версия: 0.1.2
+  Версия: 0.1.3
   Автор: @ViPiC
 #>
 
@@ -98,10 +98,12 @@ PROCESS {
         )
 
         $Name = $Name.Replace("Общество с ограниченной ответственностью", "ООО");
+        $Name = $Name.Replace("ОБЩЕСТВО С ОГРАНИЧЕННОЙ ОТВЕТСТВЕННОСТЬЮ", "ООО");
         $Name = $Name.Replace("_", " ");
         $Name = $Name.Replace('"', "");
         if ($Expanded) {
             $Name = $Name.Replace(",", "");
+            $Name = $Name.Replace("*.", "");
             $Name = $Name.TrimStart("0");
         };
         return $Name;
@@ -128,8 +130,7 @@ PROCESS {
             $AfterDate,
             [Int]$MaxDays = 0
         )
-
-        if ($BeforeDate -and $AfterDate -and $MaxDay) {
+        if ($BeforeDate -and $AfterDate -and $MaxDays) {
             if (($AfterDate - $BeforeDate).Days -gt $MaxDays) {
                 $AfterDate = $BeforeDate.AddYears(1);
             };
