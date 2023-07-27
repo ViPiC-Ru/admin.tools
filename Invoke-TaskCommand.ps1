@@ -48,7 +48,7 @@
   с папкой вывода.
 
   .NOTES
-  Версия: 0.3.2
+  Версия: 0.3.3
   Автор: @ViPiC
 #>
 
@@ -80,10 +80,10 @@ PROCESS {
     $JobTimes = @{}; # Хеш таблица временных меток стартов выполнения заданий
     $JobResults = @{}; # Хеш таблица результатов для сбойных заданий
     $Jobs = [System.Collections.ArrayList]@(); # Список фоновых заданий
-    $JobTimeOut = 10 * 60; # Максимальное время выполнения задачи в секундах
     $JobLimit = 16; # Количество параллельных задач для выполнения
+    $JobTimeOut = 70; # Максимальное время выполнения задания в минутах
+    $TaskTimeOut = 60; # Максимальное время выполнения задачи в минутах
     $CustomError = 0; # Внутренняя ошибка при выполнении скрипта
-    $TaskTimeOut = 15; # Максимальное время выполнения задачи в минутах
     $WrapperName = "wrapper.js"; # Имя файла скрипта обёртки для скрытия консоли
     $InputName = "input"; # Имя удалённой директории для ввода
     $HostName = "host"; # Имя удалённого компьютера
@@ -293,7 +293,7 @@ PROCESS {
                 foreach ($Job in $Jobs) {
                     $NowTime = Get-Date;
                     $JobTime = $JobTimes.Item($Job.Id);
-                    if ((New-TimeSpan -Start $JobTime -End $NowTime).TotalSeconds -gt $JobTimeOut) {
+                    if ((New-TimeSpan -Start $JobTime -End $NowTime).TotalMinutes -gt $JobTimeOut) {
                         Stop-Job -Job $Job;
                     };
                 };
