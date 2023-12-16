@@ -34,7 +34,7 @@
   Скрипт не генерит возвращаемые объекты.
 
   .NOTES
-  Версия: 0.1.1
+  Версия: 0.1.2
   Автор: @ViPiC
 #>
 
@@ -108,16 +108,29 @@ if ($Target -and $isCheckOnline) {
 if ($isCheckOnline) {
     # Включаем целевой компьютер
     if (-not($isTargetOnline) -and $isSourceOnline -and $MAC) {
-        $BroadcastProxy = [System.Net.IPAddress]::Broadcast;
-        $chainSync = [byte[]](, 0xFF * 6); # цепочка синфронизации
+        # Готовим магический пакет
+        $ChainSync = [byte[]](, 0xFF * 6); # цепочка синхронизации
         $MacAddress = $MAC -split "-" | ForEach-Object { [byte]("0x" + $PSItem) };
-        $MagicPacket = $chainSync + $MacAddress * 16;
-        $UdpClient = New-Object "System.Net.Sockets.UdpClient";
-        $UdpClient.Connect($BroadcastProxy, $Port);
-        for ($i = 0; $i -lt $Try; $i++) {
-            $UdpClient.Send($MagicPacket, $MagicPacket.Length) | Out-Null;
+        $MagicPacket = $ChainSync + $MacAddress * 16;
+        # Получаем список всех доступных интерфейсов для отправки
+        $Interfaces = [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object {
+            $PSItem.NetworkInterfaceType -ne [System.Net.NetworkInformation.NetworkInterfaceType]::Loopback -and
+            $PSItem.OperationalStatus -eq [System.Net.NetworkInformation.OperationalStatus]::Up
         };
-        $UdpClient.Close();
+        # Последовательно отправляем магические пакеты в доступные интерфейсы
+        foreach ($Interface in $Interfaces) {
+            $TargetIpAddress = [System.Net.IPAddress]::Broadcast;
+            $LocalIpAddress = $Interface.GetIPProperties().UnicastAddresses | Where-Object {
+                $PSItem.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork
+            } | Select-Object -First 1 | Select-Object -ExpandProperty "Address";
+            $TargetEndPoint = [System.Net.IPEndPoint]::new($TargetIpAddress, $Port);
+            $LocalEndPoint = [System.Net.IPEndPoint]::new($LocalIpAddress, 0);
+            $UdpClient = [System.Net.Sockets.UdpClient]::new($LocalEndPoint);
+            for ($i = 0; $i -lt $Try; $i++) {
+                $UdpClient.Send($MagicPacket, $MagicPacket.Length, $TargetEndPoint) | Out-Null;
+            };
+            $UdpClient.Dispose();
+        };
     };
     # Выключаем целевой компьютер
     if (-not($isSourceOnline) -and $isTargetOnline) {
